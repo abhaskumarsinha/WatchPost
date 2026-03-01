@@ -296,14 +296,21 @@ const CITIES = [
 ];
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const PROXY = 'https://api.rss2json.com/v1/api.json?rss_url=';
+// Two free CORS proxies — tried in order if first fails
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+];
+
 const SOURCES = [
   {id:'aljazeera', name:'AL JAZEERA',      color:'#ffab00', urls:['https://www.aljazeera.com/xml/rss/all.xml']},
   {id:'bbc',       name:'BBC MIDEAST',     color:'#00b0ff', urls:['https://feeds.bbci.co.uk/news/world/middle_east/rss.xml']},
-  {id:'toi',       name:'TIMES OF ISRAEL', color:'#69b3ff', urls:['https://www.timesofisrael.com/feed/']},
+  {id:'france24',  name:'FRANCE 24',       color:'#ff6e6e', urls:['https://www.france24.com/en/middle-east/rss']},
   {id:'guardian',  name:'THE GUARDIAN',    color:'#00e676', urls:['https://www.theguardian.com/world/middleeast/rss']},
-  {id:'reuters',   name:'REUTERS',         color:'#ff6e6e', urls:['https://feeds.reuters.com/reuters/worldNews']},
-  {id:'haaretz',   name:'HAARETZ',         color:'#d500f9', urls:['https://www.haaretz.com/cmlink/1.628754']},
+  {id:'dw',        name:'DW NEWS',         color:'#69b3ff', urls:['https://rss.dw.com/rss/en-middle-east']},
+  {id:'mee',       name:'MIDDLE EAST EYE', color:'#d500f9', urls:['https://www.middleeasteye.net/rss']},
+  {id:'jpost',     name:'JERUSALEM POST',  color:'#ffe048', urls:['https://www.jpost.com/rss/rssfeedsheadlines.aspx']},
+  {id:'toi',       name:'TIMES OF ISRAEL', color:'#aaddff', urls:['https://www.timesofisrael.com/feed/']},
 ];
 const RELEVANT_KW = [
   'iran','israel','gaza','hamas','hezbollah','houthi','idf','irgc',
@@ -442,12 +449,42 @@ function selectAndScroll(idx) {
 }
 
 // ── FETCH ─────────────────────────────────────────────────────────────────────
+// Parse RSS XML into item objects
+function parseRSS(xmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'text/xml');
+  const items = [];
+  doc.querySelectorAll('item').forEach(item => {
+    const get = tag => item.querySelector(tag)?.textContent?.trim() || '';
+    const getAttr = (tag, attr) => item.querySelector(tag)?.getAttribute(attr) || '';
+    // description: try content:encoded first
+    const ns = item.querySelector('encoded')?.textContent?.trim();
+    items.push({
+      title:       get('title'),
+      link:        get('link') || getAttr('link','href') || getAttr('guid',''),
+      description: ns || get('description'),
+      pubDate:     get('pubDate') || get('published') || get('updated'),
+      categories:  [...item.querySelectorAll('category')].map(c => c.textContent.trim()),
+    });
+  });
+  return items;
+}
+
+// Fetch one RSS feed, trying CORS proxies in sequence
 async function fetchFeed(url) {
-  const r = await fetch(PROXY + encodeURIComponent(url));
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const d = await r.json();
-  if (d.status !== 'ok') throw new Error(d.message || 'Feed error');
-  return d.items || [];
+  let lastErr;
+  for (const makeProxy of CORS_PROXIES) {
+    try {
+      const r = await fetch(makeProxy(url));
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      if (!text.includes('<item') && !text.includes('<entry')) throw new Error('Not RSS/Atom');
+      return parseRSS(text);
+    } catch(e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
 }
 
 function isRelevant(item) {
