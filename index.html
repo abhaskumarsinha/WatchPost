@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WATCHPOST — Middle East Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --bg0:#050709; --bg1:#090d12; --bg2:#0d1420;
+  --border:#162030; --border2:#1e3050;
+  --green:#00e676; --green-dim:#00994d;
+  --amber:#ffab00; --red:#ff1744; --blue:#00b0ff; --purple:#d500f9;
+  --white:#ddeeff; --muted:#4a6880;
+  --font-mono:'IBM Plex Mono',monospace;
+  --font-ui:'Rajdhani',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg0);color:var(--white);font-family:var(--font-ui);min-height:100vh;overflow-x:hidden}
+body::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");opacity:.4}
+
+/* TOPBAR */
+#topbar{position:sticky;top:0;z-index:500;background:rgba(5,7,9,.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border2);display:flex;align-items:stretch;height:52px}
+.tb-brand{display:flex;align-items:center;gap:10px;padding:0 20px;border-right:1px solid var(--border2)}
+.tb-sigil{width:28px;height:28px;border:1.5px solid var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--green);animation:sigil-glow 2.4s ease-in-out infinite}
+@keyframes sigil-glow{0%,100%{box-shadow:0 0 6px var(--green-dim)}50%{box-shadow:0 0 18px var(--green)}}
+.tb-name{font-size:16px;font-weight:700;letter-spacing:3px;color:var(--green)}
+.tb-sub{font-size:9px;letter-spacing:4px;color:var(--muted);font-family:var(--font-mono)}
+.tb-stats{display:flex;align-items:center;flex:1;overflow:hidden}
+.tb-stat{display:flex;flex-direction:column;justify-content:center;padding:0 18px;border-right:1px solid var(--border);height:100%}
+.tb-stat-label{font-size:8px;letter-spacing:3px;color:var(--muted);font-family:var(--font-mono)}
+.tb-stat-val{font-size:15px;font-weight:700;font-family:var(--font-mono);margin-top:1px}
+.tb-right{display:flex;align-items:center;gap:14px;padding:0 16px;border-left:1px solid var(--border2)}
+#clock{font-family:var(--font-mono);font-size:12px;color:var(--green);letter-spacing:2px}
+.refresh-btn{background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-mono);font-size:10px;letter-spacing:2px;padding:5px 12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.refresh-btn:hover{background:rgba(0,230,118,.1)}
+.refresh-btn:disabled{opacity:.35;cursor:not-allowed}
+.auto-wrap{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:9px;color:var(--muted);white-space:nowrap}
+.pill{width:30px;height:15px;border-radius:8px;background:var(--border2);cursor:pointer;position:relative;transition:background .3s;border:1px solid var(--border2)}
+.pill.on{background:rgba(0,230,118,.25);border-color:var(--green)}
+.pill::after{content:'';position:absolute;width:9px;height:9px;border-radius:50%;background:var(--muted);top:2px;left:2px;transition:all .3s}
+.pill.on::after{left:17px;background:var(--green)}
+
+/* TICKER */
+#ticker-bar{background:rgba(13,20,32,.9);border-bottom:1px solid var(--border2);height:28px;display:flex;align-items:center;overflow:hidden}
+.ticker-badge{flex-shrink:0;background:var(--red);color:#fff;font-family:var(--font-mono);font-size:9px;letter-spacing:3px;font-weight:600;padding:0 12px;height:100%;display:flex;align-items:center}
+.ticker-scroll{overflow:hidden;flex:1}
+.ticker-inner{display:inline-flex;gap:48px;white-space:nowrap;font-family:var(--font-mono);font-size:11px;color:var(--amber);animation:ticker-move 80s linear infinite;padding:0 24px}
+@keyframes ticker-move{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* MAP PANEL */
+#map-panel{background:var(--bg1);border-bottom:1px solid var(--border2)}
+#map-header{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+#map-header:hover{background:rgba(255,255,255,.02)}
+.map-title{font-family:var(--font-mono);font-size:9px;letter-spacing:3px;color:var(--muted);flex:1}
+.map-legend{display:flex;gap:14px;align-items:center}
+.legend-item{display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:9px;color:var(--muted)}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+.map-toggle-btn{font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted);background:none;border:1px solid var(--border);padding:3px 8px;cursor:pointer}
+#map-body{height:320px;overflow:hidden;transition:height .3s ease}
+#map-body.collapsed{height:0}
+#leaflet-map{width:100%;height:100%}
+
+/* Leaflet dark overrides */
+.leaflet-container{background:#060c14 !important}
+.leaflet-tile{filter:brightness(0.4) saturate(0.25) hue-rotate(185deg)}
+.leaflet-popup-content-wrapper{background:rgba(9,13,18,.97);border:1px solid var(--border2);border-radius:2px;color:var(--white);box-shadow:0 4px 24px rgba(0,0,0,.8)}
+.leaflet-popup-tip{background:rgba(9,13,18,.97)}
+.leaflet-popup-content{margin:12px 14px;font-family:var(--font-ui);font-size:13px}
+.leaflet-popup-close-button{color:var(--muted) !important;font-size:16px !important;right:8px !important;top:4px !important}
+.leaflet-control-zoom a{background:var(--bg2) !important;color:var(--muted) !important;border-color:var(--border2) !important}
+.leaflet-control-zoom a:hover{background:var(--border2) !important;color:var(--white) !important}
+.leaflet-control-attribution{background:rgba(5,7,9,.8) !important;color:var(--muted) !important;font-size:9px !important}
+.leaflet-control-attribution a{color:var(--muted) !important}
+
+/* Pulse markers */
+.pulse-marker{position:relative}
+.pulse-marker .core{position:absolute;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;height:60%}
+.pulse-marker .ring{position:absolute;inset:0;border-radius:50%;border:2px solid;animation:ring-pulse 1.8s ease-out infinite;opacity:0}
+.pulse-marker .ring2{animation-delay:.7s}
+@keyframes ring-pulse{0%{transform:scale(1);opacity:.9}100%{transform:scale(2.5);opacity:0}}
+.pm-red .core{background:#ff1744;box-shadow:0 0 10px #ff1744}
+.pm-red .ring{border-color:#ff1744}
+.pm-orange .core{background:#ffab00;box-shadow:0 0 8px #ffab00}
+.pm-orange .ring{border-color:#ffab00;animation-duration:2.4s}
+.pm-blue .core{background:#00b0ff;box-shadow:0 0 6px #00b0ff}
+.pm-blue .ring{border-color:#00b0ff;animation:none;opacity:.35}
+.pm-green .core{background:#00e676;box-shadow:0 0 6px #00e676}
+.pm-green .ring{border-color:#00e676;animation-duration:3.5s;opacity:.5}
+.pm-purple .core{background:#d500f9;box-shadow:0 0 8px #d500f9}
+.pm-purple .ring{border-color:#d500f9}
+.mention-badge{position:absolute;top:-8px;right:-8px;background:var(--red);color:#fff;font-family:var(--font-mono);font-size:8px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:1px solid rgba(255,255,255,.3);z-index:10}
+
+/* Popup */
+.pop-city{font-size:15px;font-weight:700;margin-bottom:4px;color:var(--white)}
+.pop-tag{display:inline-block;padding:1px 6px;border-radius:1px;font-size:8px;font-family:var(--font-mono);font-weight:700;letter-spacing:1px}
+.pop-mentions{font-size:11px;color:#7090b0;margin:6px 0}
+.pop-headlines{border-top:1px solid var(--border2);padding-top:8px;margin-top:2px}
+.pop-h{font-size:11px;line-height:1.5;color:#8aabcc;padding:3px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.pop-h:hover{color:var(--green)}
+.pop-h:last-child{border-bottom:none}
+
+/* FILTER BAR */
+#filterbar{background:var(--bg1);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.filter-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:2px;flex-shrink:0}
+.ftag{padding:3px 10px;border-radius:2px;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;cursor:pointer;border:1px solid var(--border2);transition:all .15s;user-select:none;color:var(--muted);background:transparent}
+.ftag:hover{color:var(--white)}
+.ftag.active{background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green)}
+.ftag.active.amber{background:rgba(255,171,0,.1);border-color:var(--amber);color:var(--amber)}
+.ftag.active.red{background:rgba(255,23,68,.1);border-color:var(--red);color:var(--red)}
+.ftag.active.blue{background:rgba(0,176,255,.1);border-color:var(--blue);color:var(--blue)}
+.ftag.active.purple{background:rgba(213,0,249,.1);border-color:var(--purple);color:var(--purple)}
+.search-box{margin-left:auto;background:transparent;border:1px solid var(--border2);color:var(--white);font-family:var(--font-mono);font-size:11px;padding:4px 10px;outline:none;border-radius:2px;transition:border-color .2s;width:180px}
+.search-box:focus{border-color:var(--green)}
+.search-box::placeholder{color:var(--muted)}
+
+/* SOURCE BAR */
+#source-bar{display:flex;background:var(--bg1);border-bottom:1px solid var(--border2);overflow-x:auto;padding:0 16px}
+.src-badge{display:flex;align-items:center;gap:7px;padding:8px 14px;border-right:1px solid var(--border);cursor:pointer;transition:background .15s;flex-shrink:0;border-bottom:2px solid transparent}
+.src-badge:hover{background:rgba(255,255,255,.03)}
+.src-badge.active{border-bottom-color:var(--green)}
+.src-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.src-name{font-size:10px;letter-spacing:2px;font-family:var(--font-mono);color:var(--muted)}
+.src-count{font-size:9px;font-family:var(--font-mono);color:var(--muted);background:var(--bg2);padding:1px 5px;border-radius:8px}
+
+/* MAIN */
+#main{display:flex;height:calc(100vh - 52px - 28px - 357px - 41px - 41px - 24px);min-height:280px}
+#feed-col{flex:1;overflow-y:auto;border-right:1px solid var(--border)}
+#detail-col{width:380px;flex-shrink:0;overflow-y:auto}
+@media(max-width:900px){#detail-col{display:none}#main{height:auto;min-height:400px;flex-direction:column}#map-body{height:240px}}
+
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2)}
+
+/* ARTICLES */
+.article{display:flex;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;position:relative;overflow:hidden}
+.article::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;transition:background .2s}
+.article:hover{background:var(--bg1)}
+.article:hover::before,.article.selected::before{background:var(--green)}
+.article.selected{background:var(--bg2)}
+.article.hidden{display:none}
+.art-meta{width:88px;flex-shrink:0;padding:13px 10px 13px 15px;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--border)}
+.art-source-dot{width:8px;height:8px;border-radius:50%}
+.art-source-name{font-size:9px;letter-spacing:1px;font-family:var(--font-mono);color:var(--muted);line-height:1.3}
+.art-age{font-size:9px;font-family:var(--font-mono);color:var(--muted);margin-top:auto}
+.art-body{flex:1;padding:11px 13px}
+.art-tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px}
+.atag{font-size:8px;letter-spacing:1.5px;font-family:var(--font-mono);padding:1px 6px;border-radius:1px;font-weight:600}
+.atag-iran{background:rgba(255,171,0,.12);color:var(--amber);border:1px solid rgba(255,171,0,.3)}
+.atag-israel{background:rgba(0,176,255,.1);color:var(--blue);border:1px solid rgba(0,176,255,.25)}
+.atag-us{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25)}
+.atag-hamas{background:rgba(255,23,68,.12);color:var(--red);border:1px solid rgba(255,23,68,.3)}
+.atag-hezbollah{background:rgba(213,0,249,.1);color:var(--purple);border:1px solid rgba(213,0,249,.25)}
+.atag-houthi{background:rgba(0,230,118,.1);color:#69ffb4;border:1px solid rgba(0,230,118,.2)}
+.atag-nuclear{background:rgba(255,23,68,.15);color:#ff6e6e;border:1px solid rgba(255,23,68,.3)}
+.atag-ceasefire{background:rgba(0,176,255,.1);color:#80d8ff;border:1px solid rgba(0,176,255,.25)}
+.atag-generic{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid var(--border2)}
+.art-title{font-size:13px;font-weight:600;line-height:1.45;color:var(--white);margin-bottom:3px}
+.art-snippet{font-size:11px;color:#5a7090;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.art-arrow{padding:13px 11px;display:flex;align-items:center;color:var(--muted);font-size:12px}
+
+/* DETAIL */
+#detail-panel{padding:20px;min-height:100%}
+.detail-placeholder{min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-family:var(--font-mono);font-size:11px;letter-spacing:2px;text-align:center}
+.det-source-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.det-dot{width:8px;height:8px;border-radius:50%}
+.det-src{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted)}
+.det-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-left:auto}
+.det-title{font-size:18px;font-weight:700;line-height:1.4;margin-bottom:12px}
+.det-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px}
+.det-snippet{font-size:13px;color:#7090b0;line-height:1.7;margin-bottom:20px}
+.det-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--green);color:var(--green);font-family:var(--font-mono);font-size:10px;letter-spacing:2px;padding:7px 14px;text-decoration:none;transition:all .15s}
+.det-link:hover{background:rgba(0,230,118,.1)}
+.det-divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+.det-section-title{font-family:var(--font-mono);font-size:9px;letter-spacing:3px;color:var(--muted);margin-bottom:12px}
+.related-item{padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.related-item:hover .rel-title{color:var(--green)}
+.rel-title{font-size:12px;font-weight:600;line-height:1.4;color:var(--white);transition:color .15s}
+.rel-meta{font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-top:3px}
+
+.loading-row{display:flex;align-items:center;gap:10px;padding:20px 16px;font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:2px}
+.spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{padding:40px 20px;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:2px}
+
+/* STATUS BAR */
+#statusbar{position:fixed;bottom:0;left:0;right:0;z-index:500;background:rgba(5,7,9,.97);border-top:1px solid var(--border2);height:24px;display:flex;align-items:center;font-family:var(--font-mono);font-size:9px;color:var(--muted);padding:0 16px;gap:20px;letter-spacing:1px}
+.sb-dot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:4px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="tb-brand">
+    <div class="tb-sigil">◈</div>
+    <div><div class="tb-name">WATCHPOST</div><div class="tb-sub">MIDEAST MONITOR</div></div>
+  </div>
+  <div class="tb-stats">
+    <div class="tb-stat"><div class="tb-stat-label">ARTICLES</div><div class="tb-stat-val" id="stat-articles" style="color:var(--green)">—</div></div>
+    <div class="tb-stat"><div class="tb-stat-label">SOURCES</div><div class="tb-stat-val" id="stat-sources" style="color:var(--blue)">—</div></div>
+    <div class="tb-stat"><div class="tb-stat-label">LAST FETCH</div><div class="tb-stat-val" id="stat-fetch" style="color:var(--amber);font-size:11px">—</div></div>
+    <div class="tb-stat"><div class="tb-stat-label">MAP HITS</div><div class="tb-stat-val" id="stat-hotspots" style="color:var(--red)">—</div></div>
+  </div>
+  <div class="tb-right">
+    <div class="auto-wrap"><div class="pill" id="auto-pill" onclick="toggleAuto()"></div>AUTO-5m</div>
+    <div id="clock">--:--:-- UTC</div>
+    <button class="refresh-btn" id="refresh-btn" onclick="fetchAll()">⟳ REFRESH</button>
+  </div>
+</div>
+
+<div id="ticker-bar">
+  <div class="ticker-badge">◉ LIVE</div>
+  <div class="ticker-scroll"><div class="ticker-inner" id="ticker-inner">Initialising feeds…</div></div>
+</div>
+
+<div id="map-panel">
+  <div id="map-header" onclick="toggleMap()">
+    <div class="tb-sigil" style="width:20px;height:20px;font-size:10px;flex-shrink:0;animation:none;box-shadow:none">⊕</div>
+    <div class="map-title">THEATER MAP — CONFLICT ZONES & MENTIONED CITIES (click article to highlight on map)</div>
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>ACTIVE COMBAT</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>HIGH ALERT</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>MONITORING</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>DIPLOMATIC</div>
+    </div>
+    <button class="map-toggle-btn" id="map-toggle-btn">▲ COLLAPSE</button>
+  </div>
+  <div id="map-body"><div id="leaflet-map"></div></div>
+</div>
+
+<div id="filterbar">
+  <span class="filter-label">FILTER:</span>
+  <span class="ftag active" data-key="all" onclick="setFilter('all',this)">ALL</span>
+  <span class="ftag" data-key="iran" data-color="amber" onclick="setFilter('iran',this)">IRAN</span>
+  <span class="ftag" data-key="israel" data-color="blue" onclick="setFilter('israel',this)">ISRAEL</span>
+  <span class="ftag" data-key="us" data-color="green" onclick="setFilter('us',this)">USA</span>
+  <span class="ftag" data-key="hamas" data-color="red" onclick="setFilter('hamas',this)">HAMAS</span>
+  <span class="ftag" data-key="hezbollah" data-color="purple" onclick="setFilter('hezbollah',this)">HEZBOLLAH</span>
+  <span class="ftag" data-key="houthi" data-color="green" onclick="setFilter('houthi',this)">HOUTHI</span>
+  <span class="ftag" data-key="nuclear" data-color="red" onclick="setFilter('nuclear',this)">NUCLEAR</span>
+  <span class="ftag" data-key="ceasefire" data-color="blue" onclick="setFilter('ceasefire',this)">CEASEFIRE</span>
+  <span class="ftag" data-key="gaza" data-color="red" onclick="setFilter('gaza',this)">GAZA</span>
+  <input class="search-box" id="search-box" placeholder="Search headlines…" oninput="applyFilters()">
+</div>
+
+<div id="source-bar"></div>
+
+<div id="main">
+  <div id="feed-col"><div class="loading-row"><div class="spinner"></div>Fetching intelligence feeds…</div></div>
+  <div id="detail-col"><div id="detail-panel"><div class="detail-placeholder"><div style="font-size:32px;opacity:.2">◈</div><div>SELECT AN ARTICLE<br>TO VIEW DETAILS</div></div></div></div>
+</div>
+
+<div id="statusbar">
+  <span><span class="sb-dot" style="background:var(--green)"></span>RSS ENGINE ACTIVE</span>
+  <span id="sb-sources">0 SOURCES LOADED</span>
+  <span id="sb-errors"></span>
+  <span style="margin-left:auto" id="sb-next">NEXT REFRESH: —</span>
+</div>
+
+<script>
+// ── CITY DATABASE ─────────────────────────────────────────────────────────────
+const CITIES = [
+  {name:'Gaza City',      lat:31.501, lng:34.466, danger:'red',    keys:['gaza city','beit hanoun'], label:'Gaza City'},
+  {name:'Gaza Strip',     lat:31.400, lng:34.350, danger:'red',    keys:['gaza strip','gaza enclave','northern gaza'], label:'Gaza Strip — Active Ground War'},
+  {name:'Rafah',          lat:31.294, lng:34.253, danger:'red',    keys:['rafah'], label:'Rafah — Crossing & Operations'},
+  {name:'Khan Younis',    lat:31.344, lng:34.307, danger:'red',    keys:['khan younis','khan yunis'], label:'Khan Younis'},
+  {name:'Jabalia',        lat:31.529, lng:34.483, danger:'red',    keys:['jabalia','jabaliya'], label:'Jabalia Refugee Camp'},
+  {name:'Beirut',         lat:33.888, lng:35.495, danger:'orange', keys:['beirut','lebanese capital'], label:'Beirut — Hezbollah Stronghold'},
+  {name:'South Lebanon',  lat:33.270, lng:35.200, danger:'orange', keys:['south lebanon','southern lebanon','litani','tyre'], label:'South Lebanon Front'},
+  {name:'Tel Aviv',       lat:32.085, lng:34.781, danger:'orange', keys:['tel aviv','tel-aviv'], label:'Tel Aviv — IDF HQ'},
+  {name:'Jerusalem',      lat:31.769, lng:35.216, danger:'orange', keys:['jerusalem','west jerusalem','east jerusalem'], label:'Jerusalem'},
+  {name:'West Bank',      lat:32.100, lng:35.220, danger:'orange', keys:['west bank','jenin','nablus','ramallah','hebron','tulkarm','jericho'], label:'West Bank — IDF Operations'},
+  {name:'Haifa',          lat:32.794, lng:34.989, danger:'orange', keys:['haifa'], label:'Haifa'},
+  {name:'Tehran',         lat:35.689, lng:51.389, danger:'orange', keys:['tehran','iranian capital'], label:'Tehran — IRGC Command'},
+  {name:'Natanz',         lat:33.723, lng:51.727, danger:'orange', keys:['natanz'], label:'Natanz — Nuclear Enrichment'},
+  {name:'Fordow',         lat:34.880, lng:50.998, danger:'orange', keys:['fordow'], label:'Fordow — Underground Nuclear Facility'},
+  {name:'Isfahan',        lat:32.661, lng:51.680, danger:'orange', keys:['isfahan','esfahan'], label:'Isfahan — Defense Industry'},
+  {name:'Bushehr',        lat:28.968, lng:50.838, danger:'orange', keys:['bushehr'], label:'Bushehr — Nuclear Power Plant'},
+  {name:"Sana'a",         lat:15.369, lng:44.191, danger:'orange', keys:["sana'a",'sanaa','yemeni capital'], label:"Sana'a — Houthi Control"},
+  {name:'Hudaydah',       lat:14.798, lng:42.954, danger:'red',    keys:['hudaydah','hodeidah'], label:'Hudaydah — Red Sea Port'},
+  {name:'Red Sea',        lat:18.500, lng:39.500, danger:'red',    keys:['red sea','bab al-mandab','strait of bab'], label:'Red Sea — Houthi Attack Zone'},
+  {name:'Damascus',       lat:33.510, lng:36.291, danger:'orange', keys:['damascus','syrian capital'], label:'Damascus — Iran Proxy Hub'},
+  {name:'Baghdad',        lat:33.341, lng:44.401, danger:'blue',   keys:['baghdad','iraqi capital'], label:'Baghdad — US Forces Present'},
+  {name:'Erbil',          lat:36.191, lng:44.009, danger:'blue',   keys:['erbil','irbil'], label:'Erbil — US Air Base'},
+  {name:'Deir ez-Zor',    lat:35.335, lng:40.141, danger:'orange', keys:['deir ez-zor','deir ezzor'], label:'Deir ez-Zor — Iran Corridor'},
+  {name:'Washington DC',  lat:38.907, lng:-77.036,danger:'green',  keys:['washington','white house','pentagon','state department'], label:'Washington DC — US Command'},
+  {name:'Doha',           lat:25.286, lng:51.533, danger:'green',  keys:['doha','qatar'], label:'Doha — Mediation Hub'},
+  {name:'Cairo',          lat:30.044, lng:31.235, danger:'green',  keys:['cairo','egypt'], label:'Cairo — Ceasefire Mediator'},
+  {name:'Riyadh',         lat:24.688, lng:46.722, danger:'blue',   keys:['riyadh','saudi arabia','saudi capital'], label:'Riyadh — Saudi Arabia'},
+  {name:'Ankara',         lat:39.921, lng:32.854, danger:'blue',   keys:['ankara','turkey','turkish'], label:'Ankara — Turkey'},
+  {name:'New York',       lat:40.712, lng:-74.006,danger:'green',  keys:['united nations','un security council','un general assembly'], label:'New York — UN Headquarters'},
+];
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const PROXY = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const SOURCES = [
+  {id:'aljazeera', name:'AL JAZEERA',      color:'#ffab00', urls:['https://www.aljazeera.com/xml/rss/all.xml']},
+  {id:'bbc',       name:'BBC MIDEAST',     color:'#00b0ff', urls:['https://feeds.bbci.co.uk/news/world/middle_east/rss.xml']},
+  {id:'toi',       name:'TIMES OF ISRAEL', color:'#69b3ff', urls:['https://www.timesofisrael.com/feed/']},
+  {id:'guardian',  name:'THE GUARDIAN',    color:'#00e676', urls:['https://www.theguardian.com/world/middleeast/rss']},
+  {id:'reuters',   name:'REUTERS',         color:'#ff6e6e', urls:['https://feeds.reuters.com/reuters/worldNews']},
+  {id:'haaretz',   name:'HAARETZ',         color:'#d500f9', urls:['https://www.haaretz.com/cmlink/1.628754']},
+];
+const RELEVANT_KW = [
+  'iran','israel','gaza','hamas','hezbollah','houthi','idf','irgc',
+  'netanyahu','khamenei','west bank','beirut','tehran','tel aviv',
+  'red sea','ceasefire','hostage','rafah','middle east','nuclear',
+  'missile','airstrike','strike','drone','ballistic','warship',
+  'sanctions','proxy','lebanese','palestinian','yemeni',
+  'war','attack','military','bomb','operation','weapons','troops',
+  'blockade','humanitarian','corridor','casualt','killed','wounded',
+  'pentagon','white house','state department','rubio'
+];
+const FILTER_MAP = {
+  iran:      ['iran','irgc','tehran','khamenei','iranian'],
+  israel:    ['israel','idf','tel aviv','netanyahu','israeli'],
+  us:        ['united states','u.s.','american','pentagon','washington','trump','rubio','state department'],
+  hamas:     ['hamas','al-qassam','islamic jihad'],
+  hezbollah: ['hezbollah','nasrallah','south lebanon'],
+  houthi:    ['houthi','yemen','yemeni','ansarallah','red sea'],
+  nuclear:   ['nuclear','uranium','enrichment','iaea'],
+  ceasefire: ['ceasefire','cease-fire','truce','negotiat','deal','hostage','release','mediat'],
+  gaza:      ['gaza','rafah','jabalia','khan younis'],
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let allArticles = [];
+let activeFilter = 'all';
+let activeSource = 'all';
+let autoInterval = null;
+let nextRefreshAt = null;
+let selectedIdx = null;
+let leafMap = null;
+let mapMarkers = {};
+let mapCollapsed = false;
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toUTCString().match(/\d{2}:\d{2}:\d{2}/)[0] + ' UTC';
+  if (nextRefreshAt) {
+    const diff = Math.max(0, Math.round((nextRefreshAt - Date.now()) / 1000));
+    document.getElementById('sb-next').textContent = diff > 0 ? `NEXT REFRESH: ${diff}s` : 'REFRESHING…';
+  }
+}
+setInterval(tick, 1000); tick();
+
+// ── MAP ───────────────────────────────────────────────────────────────────────
+function initMap() {
+  leafMap = L.map('leaflet-map', { center:[28,42], zoom:4 });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(leafMap);
+  // Place all default markers
+  CITIES.forEach(c => placeMarker(c, 0, []));
+}
+
+function makeIcon(danger, count) {
+  const colors = {red:'#ff1744', orange:'#ffab00', blue:'#00b0ff', green:'#00e676'};
+  const col = colors[danger] || '#00b0ff';
+  const sz = count > 10 ? 22 : count > 3 ? 18 : 14;
+  const pulse = (danger === 'red' || danger === 'orange')
+    ? `<div style="position:absolute;inset:0;border-radius:50%;border:2px solid ${col};animation:ring-pulse 1.8s ease-out infinite;opacity:0"></div>
+       <div style="position:absolute;inset:0;border-radius:50%;border:2px solid ${col};animation:ring-pulse 1.8s ease-out .7s infinite;opacity:0"></div>`
+    : '';
+  const badge = count > 0
+    ? `<div style="position:absolute;top:-8px;right:-8px;background:#ff1744;color:#fff;font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:1px solid rgba(255,255,255,.3);z-index:10">${count>99?'99+':count}</div>` : '';
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;width:${sz}px;height:${sz}px">
+             ${pulse}
+             <div style="position:absolute;inset:20%;border-radius:50%;background:${col};box-shadow:0 0 ${sz/2}px ${col}"></div>
+             ${badge}
+           </div>`,
+    iconSize: [sz, sz],
+    iconAnchor: [sz/2, sz/2],
+    popupAnchor: [0, -sz/2+2],
+  });
+}
+
+function placeMarker(city, count, articles) {
+  if (mapMarkers[city.name]) { leafMap.removeLayer(mapMarkers[city.name]); }
+
+  const tagColors = {
+    red:    {bg:'rgba(255,23,68,.2)',   color:'#ff6e6e', border:'rgba(255,23,68,.4)',   label:'ACTIVE COMBAT'},
+    orange: {bg:'rgba(255,171,0,.15)',  color:'#ffab00', border:'rgba(255,171,0,.35)',  label:'HIGH ALERT'},
+    blue:   {bg:'rgba(0,176,255,.1)',   color:'#00b0ff', border:'rgba(0,176,255,.3)',   label:'MONITORING'},
+    green:  {bg:'rgba(0,230,118,.1)',   color:'#00e676', border:'rgba(0,230,118,.3)',   label:'DIPLOMATIC'},
+  };
+  const tc = tagColors[city.danger] || tagColors.blue;
+
+  const headlinesHtml = articles.slice(0,4).map(art => {
+    const idx = allArticles.indexOf(art);
+    return `<div class="pop-h" onclick="selectAndScroll(${idx})">${stripHtml(art.title||'').substring(0,75)}…</div>`;
+  }).join('');
+
+  const popup = `
+    <div class="pop-city">${city.label || city.name}</div>
+    <span class="pop-tag" style="background:${tc.bg};color:${tc.color};border:1px solid ${tc.border}">${tc.label}</span>
+    <div class="pop-mentions">${count > 0 ? `<strong style="color:#ddeeff">${count}</strong> recent mention${count!==1?'s':''}` : '<span style="color:#4a6880">No recent mentions</span>'}</div>
+    ${headlinesHtml ? `<div class="pop-headlines">${headlinesHtml}</div>` : ''}`;
+
+  const m = L.marker([city.lat, city.lng], {
+    icon: makeIcon(city.danger, count),
+    zIndexOffset: count * 10,
+  }).addTo(leafMap).bindPopup(popup, {maxWidth:280, minWidth:190});
+
+  mapMarkers[city.name] = m;
+}
+
+function updateMapMarkers() {
+  const rel = allArticles.filter(a => a._relevant);
+  let hits = 0;
+  CITIES.forEach(city => {
+    const matched = rel.filter(art => {
+      const hay = ((art.title||'') + ' ' + (art.description||'')).toLowerCase();
+      return city.keys.some(k => hay.includes(k));
+    });
+    if (matched.length > 0) hits++;
+    placeMarker(city, matched.length, matched);
+  });
+  document.getElementById('stat-hotspots').textContent = hits;
+}
+
+function toggleMap() {
+  mapCollapsed = !mapCollapsed;
+  document.getElementById('map-body').classList.toggle('collapsed', mapCollapsed);
+  document.getElementById('map-toggle-btn').textContent = mapCollapsed ? '▼ EXPAND' : '▲ COLLAPSE';
+  if (!mapCollapsed && leafMap) setTimeout(() => leafMap.invalidateSize(), 320);
+}
+
+function selectAndScroll(idx) {
+  leafMap.closePopup();
+  selectArticle(idx);
+  const el = document.getElementById('art-' + idx);
+  if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); }
+}
+
+// ── FETCH ─────────────────────────────────────────────────────────────────────
+async function fetchFeed(url) {
+  const r = await fetch(PROXY + encodeURIComponent(url));
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  if (d.status !== 'ok') throw new Error(d.message || 'Feed error');
+  return d.items || [];
+}
+
+function isRelevant(item) {
+  const hay = ((item.title||'') + ' ' + (item.description||'')).toLowerCase();
+  return RELEVANT_KW.some(k => hay.includes(k));
+}
+
+function getTags(item) {
+  const hay = ((item.title||'') + ' ' + (item.description||'')).toLowerCase();
+  const t = [];
+  if (/\biran\b|irgc|tehran|iranian/.test(hay)) t.push('iran');
+  if (/\bisrael\b|idf|netanyahu|israeli/.test(hay)) t.push('israel');
+  if (/\bu\.?s\.?\b|united states|american|pentagon|washington/.test(hay)) t.push('us');
+  if (/\bhamas\b|al-qassam|islamic jihad/.test(hay)) t.push('hamas');
+  if (/\bhezbollah\b|nasrallah/.test(hay)) t.push('hezbollah');
+  if (/\bhouthi\b|yemen|yemeni|ansarallah|red sea/.test(hay)) t.push('houthi');
+  if (/nuclear|uranium|enrichment|iaea/.test(hay)) t.push('nuclear');
+  if (/ceasefire|truce|hostage|negotiat/.test(hay)) t.push('ceasefire');
+  if (/\bgaza\b|rafah|jabalia|khan younis/.test(hay)) t.push('gaza');
+  return t;
+}
+
+function timeAgo(d) {
+  if (!d) return '';
+  const m = (Date.now() - new Date(d).getTime()) / 60000;
+  if (m < 1) return 'just now';
+  if (m < 60) return `${Math.round(m)}m ago`;
+  if (m < 1440) return `${Math.round(m/60)}h ago`;
+  return `${Math.round(m/1440)}d ago`;
+}
+
+function stripHtml(s) {
+  return s?.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&nbsp;/g,' ').trim() || '';
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true; btn.textContent = '⟳ FETCHING…';
+  document.getElementById('feed-col').innerHTML = '<div class="loading-row"><div class="spinner"></div>INTERCEPTING SIGNALS…</div>';
+
+  const results = []; let ok = 0, err = 0;
+  await Promise.allSettled(SOURCES.flatMap(src => src.urls.map(async url => {
+    try {
+      const items = await fetchFeed(url);
+      items.forEach(item => results.push({
+        ...item, _sourceId:src.id, _sourceName:src.name, _sourceColor:src.color,
+        _tags:getTags(item), _relevant:isRelevant(item), _uid:(item.link||'')+(item.title||''),
+      }));
+      ok++;
+    } catch(e) { console.warn(`Feed failed [${src.name}]:`, e.message); err++; }
+  })));
+
+  const seen = new Set();
+  const unique = results.filter(a => { if(seen.has(a._uid)) return false; seen.add(a._uid); return true; });
+  unique.sort((a,b) => new Date(b.pubDate||0) - new Date(a.pubDate||0));
+  allArticles = unique;
+
+  document.getElementById('stat-articles').textContent = unique.length;
+  document.getElementById('stat-sources').textContent = ok;
+  document.getElementById('stat-fetch').textContent = new Date().toUTCString().match(/\d{2}:\d{2}:\d{2}/)[0];
+  document.getElementById('sb-errors').textContent = err ? `${err} FEED ERRORS` : '';
+  document.getElementById('sb-sources').textContent = `${ok}/${SOURCES.length} SOURCES ACTIVE`;
+
+  renderFeed(); applyFilters(); updateTicker(); updateMapMarkers();
+  btn.disabled = false; btn.textContent = '⟳ REFRESH';
+}
+
+// ── SOURCE BAR ────────────────────────────────────────────────────────────────
+function buildSourceBar() {
+  const bar = document.getElementById('source-bar');
+  const allCount = allArticles.filter(a => a._relevant).length;
+  bar.innerHTML = `<div class="src-badge active" data-src="all" onclick="setSourceFilter('all',this)">
+    <div class="src-dot" style="background:#fff;opacity:.3"></div>
+    <div class="src-name">ALL</div><div class="src-count">${allCount}</div></div>`;
+  SOURCES.forEach(src => {
+    const n = allArticles.filter(a => a._sourceId===src.id && a._relevant).length;
+    if (!n) return;
+    bar.innerHTML += `<div class="src-badge" data-src="${src.id}" onclick="setSourceFilter('${src.id}',this)">
+      <div class="src-dot" style="background:${src.color}"></div>
+      <div class="src-name">${src.name}</div><div class="src-count">${n}</div></div>`;
+  });
+}
+
+function setSourceFilter(id, el) {
+  activeSource = id;
+  document.querySelectorAll('.src-badge').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
+
+// ── FILTERS ───────────────────────────────────────────────────────────────────
+function setFilter(key, el) {
+  activeFilter = key;
+  document.querySelectorAll('.ftag').forEach(t => t.classList.remove('active','amber','red','blue','green','purple'));
+  el.classList.add('active');
+  const c = el.dataset.color; if (c) el.classList.add(c);
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('search-box').value.toLowerCase().trim();
+  const kws = activeFilter === 'all' ? null : (FILTER_MAP[activeFilter] || [activeFilter]);
+  let visible = 0;
+  allArticles.forEach((art, i) => {
+    const el = document.getElementById('art-' + i);
+    if (!el) return;
+    if (!art._relevant) { el.classList.add('hidden'); return; }
+    if (activeSource !== 'all' && art._sourceId !== activeSource) { el.classList.add('hidden'); return; }
+    if (kws) {
+      const hay = ((art.title||'') + ' ' + (art.description||'')).toLowerCase();
+      if (!kws.some(k => hay.includes(k))) { el.classList.add('hidden'); return; }
+    }
+    if (q) {
+      const hay = ((art.title||'') + ' ' + (art.description||'')).toLowerCase();
+      if (!hay.includes(q)) { el.classList.add('hidden'); return; }
+    }
+    el.classList.remove('hidden'); visible++;
+  });
+  const em = document.getElementById('empty-msg');
+  if (visible === 0 && !em) {
+    const d = document.createElement('div'); d.id = 'empty-msg'; d.className = 'empty-state';
+    d.textContent = 'NO ARTICLES MATCH CURRENT FILTERS';
+    document.getElementById('feed-col').appendChild(d);
+  } else if (visible > 0 && em) em.remove();
+}
+
+// ── RENDER FEED ───────────────────────────────────────────────────────────────
+function renderFeed() {
+  const col = document.getElementById('feed-col');
+  col.innerHTML = '';
+  if (!allArticles.length) { col.innerHTML = '<div class="empty-state">NO DATA — PRESS REFRESH</div>'; return; }
+  allArticles.forEach((art, i) => {
+    const tagsHtml = art._tags.map(t => `<span class="atag atag-${t}">${t.toUpperCase()}</span>`).join('') || '<span class="atag atag-generic">WORLD</span>';
+    const div = document.createElement('div');
+    div.className = 'article' + (art._relevant ? '' : ' hidden');
+    div.id = 'art-' + i;
+    div.onclick = () => selectArticle(i);
+    const snip = stripHtml(art.description).substring(0, 150);
+    div.innerHTML = `
+      <div class="art-meta">
+        <div class="art-source-dot" style="background:${art._sourceColor}"></div>
+        <div class="art-source-name">${art._sourceName}</div>
+        <div class="art-age">${timeAgo(art.pubDate)}</div>
+      </div>
+      <div class="art-body">
+        <div class="art-tags">${tagsHtml}</div>
+        <div class="art-title">${stripHtml(art.title||'')}</div>
+        ${snip ? `<div class="art-snippet">${snip}</div>` : ''}
+      </div>
+      <div class="art-arrow">›</div>`;
+    col.appendChild(div);
+  });
+  buildSourceBar();
+}
+
+// ── DETAIL VIEW ───────────────────────────────────────────────────────────────
+function selectArticle(idx) {
+  if (selectedIdx !== null) {
+    const old = document.getElementById('art-' + selectedIdx);
+    if (old) old.classList.remove('selected');
+  }
+  selectedIdx = idx;
+  const el = document.getElementById('art-' + idx);
+  if (el) el.classList.add('selected');
+
+  const art = allArticles[idx];
+
+  // Highlight on map
+  const hay = ((art.title||'') + ' ' + (art.description||'')).toLowerCase();
+  const mentioned = CITIES.filter(c => c.keys.some(k => hay.includes(k)));
+  if (mentioned.length > 0 && leafMap) {
+    if (mapCollapsed) toggleMap();
+    leafMap.flyTo([mentioned[0].lat, mentioned[0].lng], Math.max(leafMap.getZoom(), 5), {duration:1.2});
+    setTimeout(() => { if (mapMarkers[mentioned[0].name]) mapMarkers[mentioned[0].name].openPopup(); }, 1400);
+  }
+
+  const tagsHtml = art._tags.map(t => `<span class="atag atag-${t}" style="font-size:10px;padding:2px 8px">${t.toUpperCase()}</span>`).join('') || '';
+  const related = allArticles.filter((a,i) => i!==idx && a._relevant && a._tags.some(t => art._tags.includes(t))).slice(0,5);
+  const relHtml = related.length ? `
+    <hr class="det-divider"><div class="det-section-title">RELATED INTELLIGENCE</div>
+    ${related.map(r => `<div class="related-item" onclick="selectArticle(${allArticles.indexOf(r)})">
+      <div class="rel-title">${stripHtml(r.title||'')}</div>
+      <div class="rel-meta"><span style="color:${r._sourceColor}">${r._sourceName}</span> · ${timeAgo(r.pubDate)}</div>
+    </div>`).join('')}` : '';
+
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="det-source-row">
+      <div class="det-dot" style="background:${art._sourceColor}"></div>
+      <div class="det-src">${art._sourceName}</div>
+      <div class="det-time">${art.pubDate ? new Date(art.pubDate).toUTCString().replace(' GMT','') : ''}</div>
+    </div>
+    <div class="det-tags">${tagsHtml}</div>
+    <div class="det-title">${stripHtml(art.title||'')}</div>
+    <div class="det-snippet">${stripHtml(art.description) || 'No summary available.'}</div>
+    ${art.link ? `<a class="det-link" href="${art.link}" target="_blank" rel="noopener">↗ READ FULL ARTICLE</a>` : ''}
+    ${relHtml}`;
+
+  if (window.innerWidth <= 900) window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ── TICKER ────────────────────────────────────────────────────────────────────
+function updateTicker() {
+  const items = allArticles.filter(a => a._relevant).slice(0,12).map(a => stripHtml(a.title||'').substring(0,90));
+  if (!items.length) return;
+  const double = [...items,...items].join('   ◆   ');
+  document.getElementById('ticker-inner').textContent = double;
+}
+
+// ── AUTO REFRESH ──────────────────────────────────────────────────────────────
+function toggleAuto() {
+  const pill = document.getElementById('auto-pill');
+  if (autoInterval) {
+    clearTimeout(autoInterval); autoInterval = null; nextRefreshAt = null;
+    pill.classList.remove('on'); document.getElementById('sb-next').textContent = 'AUTO: OFF';
+  } else { pill.classList.add('on'); scheduleNext(); }
+}
+function scheduleNext() {
+  nextRefreshAt = Date.now() + 5*60*1000;
+  autoInterval = setTimeout(() => {
+    fetchAll().then(() => { if (document.getElementById('auto-pill').classList.contains('on')) scheduleNext(); });
+  }, 5*60*1000);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  initMap();
+  fetchAll();
+});
+</script>
+</body>
+</html>
